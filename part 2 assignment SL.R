@@ -4,7 +4,7 @@
 # Alexandre Lavrinenko    xxxxxx
 # Ensar Tasgin:           646820
 # Sanne Maasman           xxxxxx 
-# Sebastiaan van Helden   822236
+# Sebastiaan van Helden   XXXXX
 
 #Build up as follows:
 #2.1: Builds data generating process
@@ -29,13 +29,7 @@ set.seed(2026)
 # Two scenarios:
 # A: equal correlation --> normal kNN should perform better --> see report 
 # B: heabily correlated variables --> hybrid should perform better --> see report
-
-
-#to be deleted
-## Scenario A: equicorrelated — alle variabelen even informatief ----
-##   Alle paarsgewijze correlaties gelijk aan rho.
-##   Verwachting: RF-importances vlak -> gewogen ~ ongewogen afstand,
-##   hybrid heeft geen voordeel (alleen extra schattingsruis).
+  # with 3 variables heavily correlated 
 
 generate_data_A <- function(n, p = 10, rho = 0.5) {
   Sigma <- matrix(rho, nrow = p, ncol = p)
@@ -46,13 +40,6 @@ generate_data_A <- function(n, p = 10, rho = 0.5) {
   X
 }
 
-#to be deleted
-## Scenario B: signaalblok + ruis ----
-##   X1..X_signal = Z + e_i  (gedeelde latente factor)
-##   X_(signal+1)..Xp        = onafhankelijke ruis
-##   Impliciete correlatie binnen het blok: Var(Z) / (Var(Z) + var_e)
-##   Verwachting: RF legt bijna al het gewicht op het signaalblok,
-##   ongewogen afstand wordt verstoord door de ruisdimensies.
 
 generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
   Z <- rnorm(n, mean = 0, sd = 1)
@@ -81,9 +68,9 @@ generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
 ## MAR:   P(R | X) = P(R | X_obs)
 ## MNAR:  P(R | X) = P(R | X_obs, X_mis)
 ##
-## Kansen via logistische functie op gestandaardiseerde waarden, zodat het
-## mechanisme schaal-onafhankelijk is en ook werkt op ongeziene data.
-## sample(n, m, prob = w) garandeert exact m missings per variabele.
+## Probabilities via a logistic function on standardized values, so the
+## mechanism is scale-independent and also works on unseen data.
+## sample(n, m, prob = w) guarantees exactly m missing values per variable.
 
 make_missing <- function(X, vars, prop = 0.2,
                          mechanism = c("MCAR", "MAR", "MNAR"),
@@ -96,10 +83,10 @@ make_missing <- function(X, vars, prop = 0.2,
   
   if (mechanism %in% c("MAR", "MNAR")) {
     if (is.null(driver)) {
-      stop("driver moet gespecificeerd zijn voor MAR/MNAR")
+      stop("driver just be specified MAR/MNAR")
     }
     if (driver %in% vars) {
-      stop("driver moet volledig geobserveerd zijn: kies een kolom buiten 'vars'")
+      stop("driver must be fully observed: choose a column besued 'vars'")
     }
     z_driver <- as.numeric(scale(X[, driver]))
   }
@@ -119,10 +106,10 @@ make_missing <- function(X, vars, prop = 0.2,
 }
 
 
-## Controle: bijt het mechanisme daadwerkelijk? ----
-##   MCAR : alle gemiddelden ongeveer gelijk
-##   MAR  : driver-gemiddelde wijkt af tussen missing en observed
-##   MNAR : daarnaast wijkt ook het gemiddelde van de variabele zelf af
+## Check: does the mechanism actually work ----
+##   MCAR : all means approximately equal
+##   MAR  : driver mean differs between missing and observed rows
+##   MNAR : additionally, the mean of the variable itself differs
 
 check_missing <- function(X, X_miss, vars, driver = NULL) {
   for (j in vars) {
@@ -148,7 +135,6 @@ check_missing <- function(X, X_miss, vars, driver = NULL) {
 # 2.3 Evaluation metric ---------------------------------------------------
 #=====================================================================================================================================
 #=====================================================================================================================================
-# Wacht op part 1: aggregatiemethode bepaalt metric (mean -> RMSE, median -> MAE)
 # NRMSE: Normalized Root Mean Squared Error (RMSE/stdev())
 #     0 means perfect imputation
 #     1 measn equally as good as imputing average under MCAR
@@ -157,22 +143,16 @@ check_missing <- function(X, X_miss, vars, driver = NULL) {
 #maybe addition: bias. NRMSE tells how mich it is off, bias says in which direction
 #rapport per variable which is imputed 
 
-# Metric: NRMSE = RMSE / sd(ware variabele), alleen over de weggegooide cellen.
-#   Part 1 aggregeert met een (1/d-gewogen) gemiddelde -> minimaliseert kwadratische fout -> RMSE
-#   0 = perfecte imputatie, ~1 = even goed als gemiddelde-imputatie (onder MCAR)
-# Bias = gemiddelde van (geimputeerd - waar): richting van de fout, belangrijk onder MNAR
-# Alles per geimputeerde variabele.
-
 evaluate <- function(X_true, X_imp, X_miss) {
-  miss_mask <- is.na(X_miss)                 # TRUE waar we iets weggegooid hebben
-  diff      <- X_imp - X_true                # elementwise; 0 op geobserveerde cellen
-  vars      <- which(colSums(miss_mask) > 0) # alleen kolommen met missings
+  miss_mask <- is.na(X_miss)                 # where we made NA's
+  diff      <- X_imp - X_true                # elementwise; 0 on ibserved cells
+  vars      <- which(colSums(miss_mask) > 0) # only columns with missing values
   
   var_names <- colnames(X_true)
   if (is.null(var_names)) var_names <- paste0("X", seq_len(ncol(X_true)))
   
   nrmse <- vapply(vars, function(j) {
-    e <- diff[miss_mask[, j], j]             # alleen de gemiste cellen van kolom j
+    e <- diff[miss_mask[, j], j]             # only missing cells from column j
     sqrt(mean(e^2)) / sd(X_true[, j])
   }, numeric(1))
   
@@ -184,8 +164,8 @@ evaluate <- function(X_true, X_imp, X_miss) {
              row.names = NULL)
 }
 
-## Baseline + sanity check: gemiddelde-imputatie ----
-##   Verwachting onder MCAR: NRMSE ~ 1, bias ~ 0
+## Baseline + sanity check: average imputation ----
+##  Expectation under MCAR: NRMSE ~ 1, bias ~ 0
 mean_impute <- function(X_miss) {
   X_imp <- X_miss
   for (j in seq_len(ncol(X_miss))) {
@@ -194,10 +174,6 @@ mean_impute <- function(X_miss) {
   }
   X_imp
 }
-
-
-
-
 
 
 
@@ -227,15 +203,15 @@ source("hybrid_kNN v2 (not OG).R")
 args(hybrid_kNN)   
 
 ## Settings (motivate them in report)
-n         <- 500
-p         <- 10
-k         <- 5
-prop      <- 0.2
-strength  <- 2
-miss_vars <- 1:3      # could also be: c(1, 2, 7) om ook een ruisvariabele te imputeren in B
-driver    <- 4        # buiten miss_vars; in B informatief, in A maakt het niet uit
-R         <- 100        
-base_seed <- 2026
+n         <- 500      #num obs
+p         <- 10       #num vars
+k         <- 5        # num donors for kNN
+prop      <- 0.2      #proportion missing
+strength  <- 2        #how mucht the missingness depends on the dpeendent variable in MNAR, MAR
+miss_vars <- 1:3      # in which columns missing vairables will be present could also be: c(1, 2, 7) om ook een ruisvariabele te imputeren in B
+driver    <- 4        # The variable which decides which obs are going to be missing (MNAR, MAR)
+R         <- 100      # number of repitiions per scenario and mechanism (needed for noise in randomness of variables used) (see if we keep this in)
+base_seed <- 2026     #seed 
 
 
 ## Data per scenario ----
@@ -245,14 +221,14 @@ gen_data <- function(scenario) {
          B = generate_data_B(n, p))
 }
 
-## Methoden: allemaal dezelfde output -> list(X_hat, weights) ----
+
 methods <- list(
   hybrid     = function(Xm) hybrid_kNN(Xm, k = k, weighted = TRUE),
   unweighted = function(Xm) hybrid_kNN(Xm, k = k, weighted = FALSE),
   mean       = function(Xm) list(X_hat = mean_impute(Xm), weights = NULL)
 )
 
-## RF-gewichten (list) omzetten naar een tabel, voor de plot in 2.5 ----
+## RF-weight to table for plotting in 2.5 ----
 weights_to_df <- function(w) {
   do.call(rbind, lapply(names(w), function(t) {
     data.frame(target = t, predictor = names(w[[t]]),
@@ -260,10 +236,10 @@ weights_to_df <- function(w) {
   }))
 }
 
-## Eén replicatie ----
+## one repetition
 one_run <- function(scenario, mechanism, rep) {
   
-  set.seed(base_seed + rep)   # zelfde seed per rep -> zelfde complete data over mechanismen
+  set.seed(base_seed + rep)   #same seed per repetition
   
   X      <- gen_data(scenario)
   X_miss <- make_missing(X, miss_vars, prop, mechanism,
@@ -273,7 +249,7 @@ one_run <- function(scenario, mechanism, rep) {
   weights <- NULL
   
   for (m in names(methods)) {
-    out   <- methods[[m]](X_miss)            # alle methoden op DEZELFDE X_miss
+    out   <- methods[[m]](X_miss)            # every method on the same X_miss
     ev    <- evaluate(X, out$X_hat, X_miss)
     ev$method   <- m
     scores[[m]] <- ev
@@ -293,13 +269,13 @@ one_run <- function(scenario, mechanism, rep) {
   list(scores = scores, weights = weights)
 }
 
-## Grid: 2 scenario's x 3 mechanismen x R replicaties ----
+## Grid: 2 scenarios x 3 mechanisms x R repitions ----
 grid <- expand.grid(scenario  = c("A", "B"),
                     mechanism = c("MCAR", "MAR", "MNAR"),
                     rep       = seq_len(R),
                     stringsAsFactors = FALSE)
 
-## Draaien ----
+## running
 t0 <- Sys.time()
 runs <- lapply(seq_len(nrow(grid)), function(i) {
   g <- grid[i, ]
@@ -319,7 +295,7 @@ saveRDS(list(results = results, weights = weights_df,
         "sim_results.rds")
 
 
-## Sanity checks (zet run_checks op TRUE om te draaien) ----
+## Sanity checks (set run_checks TRUE to run) ----
 run_checks <- FALSE
 if (run_checks) {
   X_B    <- generate_data_B(n = 2000, p = 10)
@@ -332,10 +308,10 @@ if (run_checks) {
   cat("\n--- MAR  ---\n"); check_missing(X_B, X_mar,  miss_vars, driver)
   cat("\n--- MNAR ---\n"); check_missing(X_B, X_mnar, miss_vars, driver)
   
-  # evaluate: mean-imputatie onder MCAR moet NRMSE ~ 1 en bias ~ 0 geven
+  # evaluate: mean-imputatie with MCAR must be NRMSE ~ 1 and bias ~ 0 
   print(evaluate(X_B, mean_impute(X_mcar), X_mcar))
   
-  # weighted = FALSE moet gelijke gewichten geven
+  # weighted = FALSE must give equal weights
   res_uw <- hybrid_kNN(X_mcar[1:500, ], k = 5, weighted = FALSE)
   print(res_uw$weights$X1)
 }
