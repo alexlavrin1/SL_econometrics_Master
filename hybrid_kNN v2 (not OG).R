@@ -1,10 +1,14 @@
 # --------------------------------------------------------------------
+# Part 1 — Assignment Statistical Learning
 # Authors:
-# Group 6 Alexandre Lavrinenko, Ensar Tasgin 646820,
-# Sanne Maasman and Sebastiaan van Helden
+# Group 6:
+# Alexandre Lavrinenko    xxxxxx
+# Ensar Tasgin:           646820
+# Sanne Maasman           xxxxxx 
+# Sebastiaan van Helden   822236
 # --------------------------------------------------------------------
 
-hybrid_kNN <- function(X, k, ntree = 500, seed = NULL) {
+hybrid_kNN <- function(X, k, ntree = 500, seed = NULL, weighted = TRUE) {
   
   X <- as.matrix(X)
   p <- ncol(X)
@@ -103,7 +107,12 @@ hybrid_kNN <- function(X, k, ntree = 500, seed = NULL) {
     donors <- which(!missing[, target])
     predictors <- setdiff(seq_len(p), target)
     
-    rf_weights <- get_rf_weights(target)
+    if (weighted) {
+      rf_weights <- get_rf_weights(target)
+    } else {
+      rf_weights <- rep(1 / length(predictors), length(predictors))
+      names(rf_weights) <- colnames(X)[predictors]
+    }
     weights_name <- colnames(X)[target]
     
     
