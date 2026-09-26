@@ -1,7 +1,11 @@
 # --------------------------------------------------------------------
+# Part 1 — Assignment Statistical Learning
 # Authors:
-# Group 6 Alexandre Lavrinenko, Ensar Tasgin 646820,
-# Sanne Maasman and Sebastiaan van Helden
+# Group 6:
+# Alexandre Lavrinenko    xxxxxx
+# Ensar Tasgin:           646820
+# Sanne Maasman           xxxxxx 
+# Sebastiaan van Helden   822236
 # --------------------------------------------------------------------
 
 hybrid_kNN <- function(X, k, ntree = 500, seed = NULL) {
