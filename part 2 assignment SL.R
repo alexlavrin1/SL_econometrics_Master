@@ -1,155 +1,230 @@
-# ==============================================================================
-# Part 2 — Assignment Statistical Learning
-# Author: Sebastiaan
-# ==============================================================================
+# --------------------------------------------------------------------
+# Part 1 — Assignment Statistical Learning
+# Authors:
+# Group 6:
+# Alexandre Lavrinenko    xxxxxx
+# Ensar Tasgin:           646820
+# Sanne Maasman           xxxxxx 
+# Sebastiaan van Helden   822236
+# --------------------------------------------------------------------
 
-# Libraries ---------------------------------------------------------------
-
-library(MASS)
-
-
-# 2.1 Data generating processes -------------------------------------------
-
-## Scenario A: equicorrelated — alle variabelen even informatief ----
-##   Alle paarsgewijze correlaties gelijk aan rho.
-##   Verwachting: RF-importances vlak -> gewogen ~ ongewogen afstand,
-##   hybrid heeft geen voordeel (alleen extra schattingsruis).
-
-generate_data_A <- function(n, p = 10, rho = 0.5) {
-  Sigma <- matrix(rho, nrow = p, ncol = p)
-  diag(Sigma) <- 1
+hybrid_kNN <- function(X, k, ntree = 500, seed = NULL) {
   
-  X <- MASS::mvrnorm(n = n, mu = rep(0, p), Sigma = Sigma)
-  colnames(X) <- paste0("X", seq_len(p))
-  X
-}
-
-## Scenario B: signaalblok + ruis ----
-##   X1..X_signal = Z + e_i  (gedeelde latente factor)
-##   X_(signal+1)..Xp        = onafhankelijke ruis
-##   Impliciete correlatie binnen het blok: Var(Z) / (Var(Z) + var_e)
-##   Verwachting: RF legt bijna al het gewicht op het signaalblok,
-##   ongewogen afstand wordt verstoord door de ruisdimensies.
-
-generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
-  Z <- rnorm(n, mean = 0, sd = 1)
+  X <- as.matrix(X)
+  p <- ncol(X)
   
-  signal <- sapply(seq_len(n_signal), function(i) {
-    Z + rnorm(n, mean = 0, sd = sqrt(var_e))
-  })
-  
-  noise <- matrix(rnorm(n * (p - n_signal), mean = 0, sd = 1),
-                  nrow = n, ncol = p - n_signal)
-  
-  X <- cbind(signal, noise)
-  colnames(X) <- paste0("X", seq_len(p))
-  X
-}
-
-
-# 2.2 Missing data mechanisms ---------------------------------------------
-
-## MCAR:  P(R | X) = P(R)
-## MAR:   P(R | X) = P(R | X_obs)
-## MNAR:  P(R | X) = P(R | X_obs, X_mis)
-##
-## Kansen via logistische functie op gestandaardiseerde waarden, zodat het
-## mechanisme schaal-onafhankelijk is en ook werkt op ongeziene data.
-## sample(n, m, prob = w) garandeert exact m missings per variabele.
-
-make_missing <- function(X, vars, prop = 0.2,
-                         mechanism = c("MCAR", "MAR", "MNAR"),
-                         driver = NULL, strength = 2) {
-  
-  mechanism <- match.arg(mechanism)
-  n <- nrow(X)
-  m <- round(prop * n)
-  X_miss <- X
-  
-  if (mechanism %in% c("MAR", "MNAR")) {
-    if (is.null(driver)) {
-      stop("driver moet gespecificeerd zijn voor MAR/MNAR")
-    }
-    if (driver %in% vars) {
-      stop("driver moet volledig geobserveerd zijn: kies een kolom buiten 'vars'")
-    }
-    z_driver <- as.numeric(scale(X[, driver]))
+  if (is.null(colnames(X))) {
+    colnames(X) <- paste0("X", seq_len(p))
   }
   
-  for (j in vars) {
-    score <- switch(mechanism,
-                    MCAR = rep(0, n),
-                    MAR  = strength * z_driver,
-                    MNAR = strength * z_driver + strength * as.numeric(scale(X[, j]))
+  X_original <- X
+  X_hat <- X
+  missing <- is.na(X)
+  weights <- list()
+  
+  # Robust scaling for kNN distances
+  scales <- apply(X, 2, IQR, na.rm = TRUE)
+  
+  # Use SD if IQR = 0
+  zero_iqr <- scales == 0
+  scales[zero_iqr] <-
+    apply(X[, zero_iqr, drop = FALSE], 2, sd, na.rm = TRUE)
+  
+  # Constant variables do not need scaling
+  scales[is.na(scales) | scales == 0] <- 1
+  
+  X_scaled <- sweep(X, 2, scales, "/")
+  
+  
+  # Random-forest importance weights
+ 
+  get_rf_weights <- function(target) {
+    
+    predictors <- setdiff(seq_len(p), target)
+    predictor_names <- colnames(X)[predictors]
+    
+    # Only observations with observed response can train the RF
+    rf_rows <- !is.na(X[, target])
+    
+    y_rf <- X[rf_rows, target]
+    x_rf <- X[rf_rows, predictors, drop = FALSE]
+    
+    
+    # Median-impute missing RF predictors
+    medians <- apply(
+      X[, predictors, drop = FALSE],
+      2,
+      median,
+      na.rm = TRUE
     )
     
-    idx <- sample(n, m, prob = plogis(score))
-    X_miss[idx, j] <- NA
+    for (j in seq_along(predictors)) {
+      x_rf[is.na(x_rf[, j]), j] <- medians[j]
+    }
+    
+    
+    if (!is.null(seed)) {
+      set.seed(seed + target)
+    }
+    
+    fit <- randomForest::randomForest(
+      x = x_rf,
+      y = y_rf,
+      ntree = ntree,
+      importance = TRUE
+    )
+    
+    # Permutation importance
+    importance <- drop(
+      randomForest::importance(fit, type = 1)
+    )
+    
+    names(importance) <- predictor_names
+    
+    # Distance weights must be non-negative
+    importance <- pmax(importance, 0)
+    
+    # If RF gives no positive importance, use equal weights
+    if (sum(importance) == 0) {
+      importance[] <- 1
+    }
+    
+    importance / sum(importance)
   }
   
-  X_miss
-}
-
-
-## Controle: bijt het mechanisme daadwerkelijk? ----
-##   MCAR : alle gemiddelden ongeveer gelijk
-##   MAR  : driver-gemiddelde wijkt af tussen missing en observed
-##   MNAR : daarnaast wijkt ook het gemiddelde van de variabele zelf af
-
-check_missing <- function(X, X_miss, vars, driver = NULL) {
-  for (j in vars) {
-    r <- is.na(X_miss[, j])
-    cat(sprintf("Var %-3d | prop = %.3f", j, mean(r)))
-    if (!is.null(driver)) {
-      cat(sprintf(" | driver mis/obs = %6.2f / %6.2f",
-                  mean(X[r, driver]), mean(X[!r, driver])))
+  
+  
+  # Hybrid kNN imputation
+  
+  for (target in seq_len(p)) {
+    
+    recipients <- which(missing[, target])
+    
+    if (length(recipients) == 0) {
+      next
     }
-    cat(sprintf(" | self mis/obs = %6.2f / %6.2f\n",
-                mean(X[r, j]), mean(X[!r, j])))
+    
+    donors <- which(!missing[, target])
+    predictors <- setdiff(seq_len(p), target)
+    
+    rf_weights <- get_rf_weights(target)
+    weights_name <- colnames(X)[target]
+    
+    
+    weights[[weights_name]] <- rf_weights
+    
+    
+    for (recipient in recipients) {
+      
+      donor_values <-
+        X_scaled[donors, predictors, drop = FALSE]
+      
+      recipient_values <-
+        X_scaled[recipient, predictors]
+      
+      
+      # Variables observed in both recipient and donor
+      common <-
+        !is.na(donor_values) &
+        matrix(
+          !is.na(recipient_values),
+          nrow = length(donors),
+          ncol = length(predictors),
+          byrow = TRUE
+        )
+      
+      n_common <- rowSums(common)
+      
+      
+      # Squared differences
+      differences <- sweep(
+        donor_values,
+        2,
+        recipient_values,
+        "-"
+      )^2
+      
+      differences[!common] <- 0
+      
+      
+      # Sum of available RF weights for each donor
+      weight_sum <- rowSums(
+        sweep(common, 2, rf_weights, "*")
+      )
+      
+      weighted_sum <- rowSums(
+        sweep(differences, 2, rf_weights, "*")
+      )
+      
+      
+      distances <- rep(Inf, length(donors))
+      
+      # Normal RF-weighted distance
+      use_rf <- weight_sum > 0
+      
+      distances[use_rf] <-
+        sqrt(
+          weighted_sum[use_rf] /
+            weight_sum[use_rf]
+        )
+      
+      
+      # If all common predictors have RF weight zero,
+      # use equal weights across those predictors
+      use_equal <- weight_sum == 0 & n_common > 0
+      
+      distances[use_equal] <-
+        sqrt(
+          rowSums(
+            differences[use_equal, , drop = FALSE]
+          ) /
+            n_common[use_equal]
+        )
+      
+      
+      # Select k nearest valid donors
+      valid <- is.finite(distances)
+      
+      if (!any(valid)) {
+        
+        X_hat[recipient, target] <-
+          mean(X_original[donors, target])
+        
+      } else {
+        
+        valid_donors <- donors[valid]
+        valid_distances <- distances[valid]
+        
+        k_use <- min(k, length(valid_donors))
+        
+        order_k <- order(valid_distances)[seq_len(k_use)]
+        
+        nearest <- valid_donors[order_k]
+        nearest_dist <- valid_distances[order_k]
+        nearest_values <- X_original[nearest, target]
+        
+        # If one or more donors have distance 0,
+        # average only those exact matches
+        if (any(nearest_dist == 0)) {
+          
+          X_hat[recipient, target] <-
+            mean(nearest_values[nearest_dist == 0])
+          
+        } else {
+          
+          donor_weights <- 1 / nearest_dist
+          donor_weights <- donor_weights / sum(donor_weights)
+          
+          X_hat[recipient, target] <-
+            sum(donor_weights * nearest_values)
+        }
+      }
+    }
   }
+  
+  
+  list(
+    X_hat = X_hat,
+    weights = weights
+  )
 }
-
-
-# Test --------------------------------------------------------------------
-
-set.seed(2026)
-
-X_A <- generate_data_A(n = 500, p = 10)
-X_B <- generate_data_B(n = 500, p = 10)
-
-round(cor(X_B), 2)   # blok X1-X4 hoog gecorreleerd, rest ~ 0
-
-miss_vars <- 1:3
-driver    <- 4       # informatieve variabele, buiten miss_vars
-
-X_mcar <- make_missing(X_B, miss_vars, 0.2, "MCAR")
-X_mar  <- make_missing(X_B, miss_vars, 0.2, "MAR",  driver = driver, strength = 2)
-X_mnar <- make_missing(X_B, miss_vars, 0.2, "MNAR", driver = driver, strength = 2)
-
-cat("\n--- MCAR ---\n"); check_missing(X_B, X_mcar, miss_vars, driver)
-cat("\n--- MAR  ---\n"); check_missing(X_B, X_mar,  miss_vars, driver)
-cat("\n--- MNAR ---\n"); check_missing(X_B, X_mnar, miss_vars, driver)
-
-
-
-# 2.3 Evaluation metric ---------------------------------------------------
-# Wacht op part 1: aggregatiemethode bepaalt metric (mean -> RMSE, median -> MAE)
-
-
-
-
-
-# 2.4 Simulation kNN ------------------------------------------------------
-
-
-
-
-
-
-# 2.5 Summarize data  ------------------------------------------------------
-
-
-
-
-
-
