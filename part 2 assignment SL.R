@@ -191,32 +191,40 @@ check_missing <- function(X, X_miss, vars, driver = NULL) {
 #=====================================================================================================================================
 # NRMSE: Normalized Root Mean Squared Error (RMSE/stdev())
 #     0 means perfect imputation
-#     1 measn equally as good as imputing average under MCAR
-# assignment asks which evaluation metrix do we suggest --> choose 1: NRMSE
+#     1 means equally as good as imputing average under MCAR
+# assignment asks which evaluation metric do we suggest --> choose 1: NRMSE
 
 #maybe addition: bias. NRMSE tells how mich it is off, bias says in which direction
 #report per variable which is imputed 
 
 evaluate <- function(X_true, X_imp, X_miss) {
-  miss_mask <- is.na(X_miss)                 # where we made NA's
-  diff      <- X_imp - X_true                # elementwise; 0 on ibserved cells
-  vars      <- which(colSums(miss_mask) > 0) # only columns with missing values
-  
+  miss_mask <- is.na(X_miss)                 # TRUE/FALSE matrix (same size as X_miss)
+  diff      <- X_imp - X_true                # elementwise error matrix; 0 on non-missing (observed) cells 
+  vars      <- which(colSums(miss_mask) > 0) # collects the indices of columns with missing values
+
+  # Assigns column names if no column names
   var_names <- colnames(X_true)
   if (is.null(var_names)) var_names <- paste0("X", seq_len(ncol(X_true)))
-  
+
+  # Applies function(j) once to each value of j in vars (j=1, then j=2, then j=3...)
   nrmse <- vapply(vars, function(j) {
-    e <- diff[miss_mask[, j], j]             # only missing cells from column j
-    sqrt(mean(e^2)) / sd(X_true[, j])
-  }, numeric(1))
-  
+                            # Computes imputation errors only for the missing cells from column j
+                            e <- diff[miss_mask[, j], j]             
+                            sqrt(mean(e^2)) / sd(X_true[, j])
+                        # Returns a single number
+                        }, numeric(1))
+
+  # Computes bias only for the rows in column j where data was missing, then averages those errors (mean signed error)
   bias <- vapply(vars, function(j) {
     mean(diff[miss_mask[, j], j])
   }, numeric(1))
-  
+
+  # Collects all computed values into a dataframe
   data.frame(variable = var_names[vars], nrmse = nrmse, bias = bias,
              row.names = NULL)
 }
+
+
 
 ## Baseline + sanity check: average imputation ----
 ##  Expectation under MCAR: NRMSE ~ 1, bias ~ 0
