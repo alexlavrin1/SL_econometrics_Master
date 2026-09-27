@@ -195,7 +195,7 @@ check_missing <- function(X, X_miss, vars, driver = NULL) {
 # assignment asks which evaluation metrix do we suggest --> choose 1: NRMSE
 
 #maybe addition: bias. NRMSE tells how mich it is off, bias says in which direction
-#rapport per variable which is imputed 
+#report per variable which is imputed 
 
 evaluate <- function(X_true, X_imp, X_miss) {
   miss_mask <- is.na(X_miss)                 # where we made NA's
