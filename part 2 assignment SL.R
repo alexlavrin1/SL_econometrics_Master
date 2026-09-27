@@ -80,18 +80,30 @@ generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
 ## MAR:   P(R | X) = P(R | X_obs)
 ## MNAR:  P(R | X) = P(R | X_obs, X_mis)
 ##
-## Probabilities via a logistic function on standardized values, so the
-## mechanism is scale-independent and also works on unseen data.
+## Probabilities via a logistic function on standardized values, so the mechanism is scale-independent and also works on unseen data.
 ## sample(n, m, prob = w) guarantees exactly m missing values per variable.
 
+
+# vars: specifies in which columns we induce missing values
+# prop: target proportion missing per column
+# driver: the fully-observed variable that missingness probability depends on under MAR/MNAR
+# strength: controls how strongly missingness probability depends on the driver in MAR/MNAR (and for MNAR, on the variable's own value too)
 make_missing <- function(X, vars, prop = 0.2,
                          mechanism = c("MCAR", "MAR", "MNAR"),
                          driver = NULL, strength = 2) {
   
+  # Validates that mechanism is one of the allowed options; defaults to MCAR if not specified and throws error if user chose a non-existing parameter input
   mechanism <- match.arg(mechanism)
+  
+  # Number of rows
   n <- nrow(X)
+  
+  # Number of cells to delete per column, rounded to nearest integer (for example, prop=0.2 and n=500 imply m=100).
   m <- round(prop * n)
+  
+  # Copy of X, such that the original X stays unchanged
   X_miss <- X
+
   
   if (mechanism %in% c("MAR", "MNAR")) {
     if (is.null(driver)) {
@@ -100,13 +112,18 @@ make_missing <- function(X, vars, prop = 0.2,
     if (driver %in% vars) {
       stop("driver must be fully observed: choose a column besued 'vars'")
     }
+    # Standardizes the driver column such that 'strength' has a comparable effect regardless of the driver's original scale
     z_driver <- as.numeric(scale(X[, driver]))
   }
-  
+
+  # Iterates over every column in 'vars', applying the missing values
   for (j in vars) {
     score <- switch(mechanism,
+                    # Identical probability of missing for all observations
                     MCAR = rep(0, n),
+                    # Score depends linearly on the (standardized) driver only
                     MAR  = strength * z_driver,
+                    # Score depends on the (standardized) driver and the standardized value of the variable being deleted; its own value influences whether it goes missing.
                     MNAR = strength * z_driver + strength * as.numeric(scale(X[, j]))
     )
     
