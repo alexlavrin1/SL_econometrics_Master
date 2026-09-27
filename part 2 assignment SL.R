@@ -145,19 +145,34 @@ make_missing <- function(X, vars, prop = 0.2,
 
 
 
-## Check: does the mechanism actually work ----
+## Diagnostic function: confirm whether the mechanisms actually work
 ##   MCAR : all means approximately equal
 ##   MAR  : driver mean differs between missing and observed rows
 ##   MNAR : additionally, the mean of the variable itself differs
 
 check_missing <- function(X, X_miss, vars, driver = NULL) {
   for (j in vars) {
+    # Returns a vector of TRUE/FALSE values, one for each row in column j (each entry tells you whether that specific cell is missing (NA) or not)
     r <- is.na(X_miss[, j])
+
+    # Prints Var j | prop = mean(r), where mean(r) is the actual observed proportion of missing values in that column
     cat(sprintf("Var %-3d | prop = %.3f", j, mean(r)))
+
+    # If a driver was specified, print:
+          # The average driver value among observations where variable j went missing,
+          # The average driver value among observations where variable j is still observed.
     if (!is.null(driver)) {
       cat(sprintf(" | driver mis/obs = %6.2f / %6.2f",
                   mean(X[r, driver]), mean(X[!r, driver])))
     }
+
+    # X[r,j]: from column j of the true data X, give me only the rows where r is TRUE" (that is, only the rows where variable j was deleted in X_miss). 
+    # This recovers what those now-missing values actually were, before they got wiped out.
+    # mean(X[r,j]): averages these values
+    
+    # Prints:
+          # The true average of variable j, restricted to rows that ended up missing,
+          # The true average of variable j, restricted to rows that stayed observed.
     cat(sprintf(" | self mis/obs = %6.2f / %6.2f\n",
                 mean(X[r, j]), mean(X[!r, j])))
   }
