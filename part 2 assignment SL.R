@@ -391,7 +391,7 @@ if (run_checks) {
 
 
 #===============================================
-#do evaluation
+#do evaluation (already done if I'm not mistaken)
 
 
 
