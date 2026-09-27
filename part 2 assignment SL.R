@@ -226,14 +226,18 @@ evaluate <- function(X_true, X_imp, X_miss) {
 
 
 
-## Baseline + sanity check: average imputation ----
+## Baseline + sanity check: average imputation
 ##  Expectation under MCAR: NRMSE ~ 1, bias ~ 0
 mean_impute <- function(X_miss) {
   X_imp <- X_miss
+  # Iterate over every column in X_miss
   for (j in seq_len(ncol(X_miss))) {
+    # Returns which rows are missing in column j (TRUE/FALSE per row)
     na <- is.na(X_miss[, j])
+    # Fill missing rows in column j with that column's own observed mean (na.rm = TRUE excludes the NAs themselves when computing the mean)
     X_imp[na, j] <- mean(X_miss[, j], na.rm = TRUE)
   }
+  # Returns the fully imputed matrix 
   X_imp
 }
 
@@ -249,48 +253,49 @@ mean_impute <- function(X_miss) {
 # How is the simulatiom going to go?
 #   
 # First, two datasets are generates:
-#   - A: regular kNN should perform better
-#   - B: hybrid kNN should perform better
+#   - A: regular kNN should perform well.
+#   - B: hybrid kNN should perform well.
 # 
 # Then per set, 4 matrices will be made:
 #   1. original (complete) matrix
-#   2. matirx with deleted values by MCAR, MAR & MNAR
+#   2. matrix with deleted values by MCAR, MAR & MNAR
 #   3. matrix with imputed valued based on matrix 2
-#   4. differences matrix where matrix with imputed values - orginal matrix (to evaluate imputations, omly imputations have nonzero values (besides perfect imputations))
+#   4. differences matrix is constructed where matrix with imputed values - orginal matrix (to evaluate imputations, only imputations have nonzero values (besides perfect imputations))
 #   
-# Them evaluation function is used on differneces matrix
-# Results will be plotted (2.5)
+# Then evaluation function is used on differences matrix
+# Results will be plotted in Section (2.5)
 
 source("hybrid_kNN v2 (not OG).R")
 args(hybrid_kNN)   
 
 ## Settings (motivate them in report)
-n         <- 500      #num obs
-p         <- 10       #num vars
+n         <- 500      # num obs
+p         <- 10       # num vars
 k         <- 5        # num donors for kNN
-prop      <- 0.2      #proportion missing
-strength  <- 2        #how mucht the missingness depends on the dpeendent variable in MNAR, MAR
-miss_vars <- 1:3      # in which columns missing vairables will be present could also be: c(1, 2, 7) om ook een ruisvariabele te imputeren in B
+prop      <- 0.2      # proportion missing
+strength  <- 2        # how much the missingness depends on the dependent variable in MNAR, MAR
+miss_vars <- 1:3      # in which columns missing variables will be present could also be: c(1, 2, 7) om ook een ruisvariabele te imputeren in B
 driver    <- 4        # The variable which decides which obs are going to be missing (MNAR, MAR)
-R         <- 100      # number of repitiions per scenario and mechanism (needed for noise in randomness of variables used) (see if we keep this in)
+R         <- 100      # Number of repitiions per scenario and mechanism (needed for noise in randomness of variables used) (see if we keep this in)
 base_seed <- 2026     #seed 
 
 
-## Data per scenario ----
+## Generating the data for each scenario
 gen_data <- function(scenario) {
   switch(scenario,
          A = generate_data_A(n, p),
          B = generate_data_B(n, p))
 }
 
-
+# Named list of the three imputation methods being compared, each wrapped as a function of just Xm (the data with missing values)
 methods <- list(
   hybrid     = function(Xm) hybrid_kNN(Xm, k = k, weighted = TRUE),
   unweighted = function(Xm) hybrid_kNN(Xm, k = k, weighted = FALSE),
   mean       = function(Xm) list(X_hat = mean_impute(Xm), weights = NULL)
 )
 
-## RF-weight to table for plotting in 2.5 ----
+# # Convert hybrid_kNN's weights (a named list: one named vector of predictor weights per target variable) into one long/tidy data frame with columns # target, predictor, weight
+## Converts RF-weight to table for plotting in 2.5 ----
 weights_to_df <- function(w) {
   do.call(rbind, lapply(names(w), function(t) {
     data.frame(target = t, predictor = names(w[[t]]),
