@@ -116,23 +116,33 @@ make_missing <- function(X, vars, prop = 0.2,
     z_driver <- as.numeric(scale(X[, driver]))
   }
 
-  # Iterates over every column in 'vars', applying the missing values
+  # Iterates over every column in 'vars'
   for (j in vars) {
+    # For each observation, assigns a score; rows with higher scores are more likely to be chosen as missing.
     score <- switch(mechanism,
-                    # Identical probability of missing for all observations
+                    # Identical probability of missing for all observations (score = 0 for each) 
                     MCAR = rep(0, n),
                     # Score depends linearly on the (standardized) driver only
                     MAR  = strength * z_driver,
                     # Score depends on the (standardized) driver and the standardized value of the variable being deleted; its own value influences whether it goes missing.
                     MNAR = strength * z_driver + strength * as.numeric(scale(X[, j]))
     )
+
     
+    # plogis(score): converts the score to a probability in (0,1) using the logistic (sigmoid) function
+    
+    # Draws m row indices out of n (without replacement): probability of each being selected is (roughly) proportional to plogis(score) for that row
     idx <- sample(n, m, prob = plogis(score))
+
+    # Sets those m rows in column j to NA
     X_miss[idx, j] <- NA
   }
-  
+
+  # Returns the full matrix with missing values (NA) now inserted across the vars columns
   X_miss
 }
+
+
 
 
 ## Check: does the mechanism actually work ----
