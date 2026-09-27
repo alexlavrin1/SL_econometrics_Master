@@ -294,8 +294,7 @@ methods <- list(
   mean       = function(Xm) list(X_hat = mean_impute(Xm), weights = NULL)
 )
 
-# # Convert hybrid_kNN's weights (a named list: one named vector of predictor weights per target variable) into one long/tidy data frame with columns # target, predictor, weight
-## Converts RF-weight to table for plotting in 2.5 ----
+## Converts RF-weight to table for easier plotting in 2.5: combines smaller data frames for each target variable (X1, X2, X3) into a larger dataframe
 weights_to_df <- function(w) {
   do.call(rbind, lapply(names(w), function(t) {
     data.frame(target = t, predictor = names(w[[t]]),
@@ -303,40 +302,45 @@ weights_to_df <- function(w) {
   }))
 }
 
-## one repetition
+# Defines a function that runs one full repetition of the simulation, given a scenario, missingness mechanism and a repetition number.
 one_run <- function(scenario, mechanism, rep) {
   
-  set.seed(base_seed + rep)   #same seed per repetition
+  # Ensures the same seed per repetition (same seed is reused across different mechanisms for the same rep)
+  set.seed(base_seed + rep)   
   
   X      <- gen_data(scenario)
   X_miss <- make_missing(X, miss_vars, prop, mechanism,
                          driver = driver, strength = strength)
-  
+
+  # Intitializes variables 
   scores  <- list()
   weights <- NULL
   
   for (m in names(methods)) {
     out   <- methods[[m]](X_miss)            # every method on the same X_miss
-    ev    <- evaluate(X, out$X_hat, X_miss)
-    ev$method   <- m
-    scores[[m]] <- ev
+    ev    <- evaluate(X, out$X_hat, X_miss)  # computes NRMSE and bias per affected variable: compares true data X against this method's imputed result out$X_hat
+    ev$method   <- m                         # adds a new column (method) to the evaluation data frame that labels every row with which method produced it
+    scores[[m]] <- ev                        # stores this method's labelled evaluation data frame into the scores list, under the name m
     
     if (m == "hybrid") weights <- weights_to_df(out$weights)
   }
+
+  scores <- do.call(rbind, scores)            # Combines the scores data frames row-wise into one large dataframe
+  scores$scenario  <- scenario                # Adds "scenario" column to scores dataframe
+  scores$mechanism <- mechanism               # Adds "mechanism" column to scores dataframe
+  scores$rep       <- rep                     # Adds "rep" column to scores dataframe
   
-  scores <- do.call(rbind, scores)
-  scores$scenario  <- scenario
-  scores$mechanism <- mechanism
-  scores$rep       <- rep
+  weights$scenario  <- scenario               # Adds "scenario" column to weights dataframe
+  weights$mechanism <- mechanism              # Adds "mechanism" column to weights dataframe
+  weights$rep       <- rep                    # Adds "rep" column to weights dataframe
   
-  weights$scenario  <- scenario
-  weights$mechanism <- mechanism
-  weights$rep       <- rep
-  
-  list(scores = scores, weights = weights)
+  list(scores = scores, weights = weights)    # Returns the scores and weights dataframes (as a list)
 }
 
-## Grid: 2 scenarios x 3 mechanisms x R repitions ----
+
+## Grid: 2 scenarios x 3 mechanisms x R repitions 
+
+# Takes multiple vectors and builds a data frame containing every possible combination of their elements (one row per combination)
 grid <- expand.grid(scenario  = c("A", "B"),
                     mechanism = c("MCAR", "MAR", "MNAR"),
                     rep       = seq_len(R),
@@ -344,25 +348,26 @@ grid <- expand.grid(scenario  = c("A", "B"),
 
 ## running
 t0 <- Sys.time()
-runs <- lapply(seq_len(nrow(grid)), function(i) {
-  g <- grid[i, ]
+runs <- lapply(seq_len(nrow(grid)), function(i) {       # runs function once for every index in nrow(grid)
+  g <- grid[i, ]                                        # extracts row i of grid (scenario, mechanism, rep)
   cat(sprintf("%s | %s | %-4s | rep %d\n",
               format(Sys.time(), "%H:%M:%S"), g$scenario, g$mechanism, g$rep))
-  one_run(g$scenario, g$mechanism, g$rep)
+  one_run(g$scenario, g$mechanism, g$rep)               # calls one_run() with this row's scenario, mechanism and rep
 })
 print(Sys.time() - t0)
 
-results    <- do.call(rbind, lapply(runs, `[[`, "scores"))
-weights_df <- do.call(rbind, lapply(runs, `[[`, "weights"))
+results    <- do.call(rbind, lapply(runs, `[[`, "scores"))   # Extracts 'scores' from every iteration in runs (one data frame per iteration) and stacks them row-wise into one large dataframe
+weights_df <- do.call(rbind, lapply(runs, `[[`, "weights"))  # Same idea, but extracting and stacking the 'weights' element instead
 
-saveRDS(list(results = results, weights = weights_df,
+# Saves results, weights, and settings to disk (such that simulation does not need to be rerun every time want to explore/plot results).
+saveRDS(list(results = results, weights = weights_df
              settings = list(n = n, p = p, k = k, prop = prop, strength = strength,
                              miss_vars = miss_vars, driver = driver, R = R,
                              base_seed = base_seed)),
         "sim_results.rds")
 
 
-## Sanity checks (set run_checks TRUE to run) ----
+## Sanity checks (set run_checks TRUE to run)
 run_checks <- FALSE
 if (run_checks) {
   X_B    <- generate_data_B(n = 2000, p = 10)
