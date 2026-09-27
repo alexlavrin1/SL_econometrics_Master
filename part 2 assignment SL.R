@@ -360,7 +360,7 @@ results    <- do.call(rbind, lapply(runs, `[[`, "scores"))   # Extracts 'scores'
 weights_df <- do.call(rbind, lapply(runs, `[[`, "weights"))  # Same idea, but extracting and stacking the 'weights' element instead
 
 # Saves results, weights, and settings to disk (such that simulation does not need to be rerun every time want to explore/plot results).
-saveRDS(list(results = results, weights = weights_df
+saveRDS(list(results = results, weights = weights_df,
              settings = list(n = n, p = p, k = k, prop = prop, strength = strength,
                              miss_vars = miss_vars, driver = driver, R = R,
                              base_seed = base_seed)),
