@@ -6,14 +6,14 @@
 # Sanne Maasman           644729 
 # Sebastiaan van Helden   XXXXX
 
-#Build up as follows:
-#2.1: Builds data generating process
-#2.2: builds the missing data mechanisms
+# Build up as follows:
+# 2.1: Builds data generating process
+# 2.2: Builds the missing data mechanisms
 
-#remaining part run the simulation and comparison
-#2.3: makes scoring fucntion to evaluate the imputations
-#2.4: Runs the simulation
-#2.5: Summarizes and plots the results
+# Remaining part run the simulation and comparison
+# 2.3: Makes scoring function (evaluation metric) to evaluate the imputations
+# 2.4: Runs the simulation
+# 2.5: Summarizes and plots the results
 # ==============================================================================
 
 # Libraries ---------------------------------------------------------------
@@ -27,16 +27,20 @@ set.seed(2026)
 #=====================================================================================================================================
 #=====================================================================================================================================
 # Two scenarios:
-# A: equal correlation --> normal kNN should perform better --> see report 
-# B: heabily correlated variables --> hybrid should perform better --> see report
+# A: equal correlation --> normal kNN should perform better (should they not perform equally well?) --> see report 
+# B: heavily correlated variables --> hybrid should perform better --> see report
   # with 3 variables heavily correlated 
 
 generate_data_A <- function(n, p = 10, rho = 0.5) {
+  # Builds a pxp matrix filled entirely with rho (0.5)
   Sigma <- matrix(rho, nrow = p, ncol = p)
+  # Overwrites the diagonal with 1's
   diag(Sigma) <- 1
-  
+  # Draws n observations from a p-dimensional multivariate normal with mean 0 for every variable and correlation matrix Sigma
   X <- MASS::mvrnorm(n = n, mu = rep(0, p), Sigma = Sigma)
+  # Names columns X1,...,X10
   colnames(X) <- paste0("X", seq_len(p))
+  # Returns an nxp matrix
   X
 }
 
