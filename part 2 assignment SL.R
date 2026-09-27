@@ -34,32 +34,40 @@ set.seed(2026)
 generate_data_A <- function(n, p = 10, rho = 0.5) {
   # Builds a pxp matrix filled entirely with rho (0.5)
   Sigma <- matrix(rho, nrow = p, ncol = p)
+  
   # Overwrites the diagonal with 1's
   diag(Sigma) <- 1
+  
   # Draws n observations from a p-dimensional multivariate normal with mean 0 for every variable and correlation matrix Sigma
   X <- MASS::mvrnorm(n = n, mu = rep(0, p), Sigma = Sigma)
+  
   # Names columns X1,...,X10
   colnames(X) <- paste0("X", seq_len(p))
+  
   # Returns an nxp matrix
   X
 }
 
-
 generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
+  # Generates a latent common factor (standard normal, vector length n)
   Z <- rnorm(n, mean = 0, sd = 1)
   
+  # Generates an nxn_signal matrix, with each column Z plus an independent noise term with variance var_e 
   signal <- replicate(n_signal, Z + rnorm(n, sd = sqrt(var_e)))
   
-  noise <- matrix(rnorm(n * (p - n_signal), mean = 0, sd = 1),
+  # Draws n * (p - n_signal) random values from a standard normal distribution, then reshapes these values into a nx(p-n_signal) matrix
+  noise <- matrix(rnorm(n * (p - n_signal), mean = 0, sd = 1), 
                   nrow = n, ncol = p - n_signal)
-  
+
+  # Combines matrices signal and noise into one large matrix
   X <- cbind(signal, noise)
+
+  # Assigns column names X1…X10
   colnames(X) <- paste0("X", seq_len(p))
+
+  # Returns an nxp matrix
   X
 }
-
-
-
 
 
 
