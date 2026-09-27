@@ -134,7 +134,7 @@ make_missing <- function(X, vars, prop = 0.2,
     # Draws m row indices out of n (without replacement): probability of each being selected is (roughly) proportional to plogis(score) for that row
     idx <- sample(n, m, prob = plogis(score))
 
-    # Sets those m rows in column j to NA
+    # Sets value NA to those m rows in column j
     X_miss[idx, j] <- NA
   }
 
