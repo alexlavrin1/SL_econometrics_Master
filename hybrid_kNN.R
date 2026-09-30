@@ -22,7 +22,7 @@
 
 
 hybrid_kNN <- function(X, k, ntree = 500, seed = NULL, weighted = TRUE) {
-  
+  # weighted = FALSE: equal weights (standard kNN)
   # Convert input to a matrix and store the number of variables
   X <- as.matrix(X)
   p <- ncol(X)
