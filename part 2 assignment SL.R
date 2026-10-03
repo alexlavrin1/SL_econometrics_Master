@@ -29,7 +29,7 @@ set.seed(2026)
 # Two scenarios:
 # A: equal correlation --> normal kNN should perform better (should they not perform equally well?) --> see report 
 # B: heavily correlated variables --> hybrid should perform better --> see report
-  # with 3 variables heavily correlated 
+# with 3 variables heavily correlated 
 
 generate_data_A <- function(n, p = 10, rho = 0.5) {
   # Builds a pxp matrix filled entirely with rho (0.5)
@@ -58,13 +58,13 @@ generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
   # Draws n * (p - n_signal) random values from a standard normal distribution, then reshapes these values into a nx(p-n_signal) matrix
   noise <- matrix(rnorm(n * (p - n_signal), mean = 0, sd = 1), 
                   nrow = n, ncol = p - n_signal)
-
+  
   # Combines matrices signal and noise into one large matrix
   X <- cbind(signal, noise)
-
+  
   # Assigns column names X1…X10
   colnames(X) <- paste0("X", seq_len(p))
-
+  
   # Returns an nxp matrix
   X
 }
@@ -87,12 +87,12 @@ generate_data_B <- function(n, p = 10, n_signal = 4, var_e = 0.3) {
 # vars: specifies in which columns we induce missing values
 # prop: target proportion missing per column
 # driver: the fully-observed variable that missingness probability depends on under MAR/MNAR
-# strength: controls how strongly missingness probability depends on the driver in MAR/MNAR (and for MNAR, on the variable's own value too)
+# strength: controls how strongly missingness probability depends on the driver in MAR/MNAR
 make_missing <- function(X, vars, prop = 0.2,
                          mechanism = c("MCAR", "MAR", "MNAR"),
                          driver = NULL, strength = 2) {
   
-  # Validates that mechanism is one of the allowed options; defaults to MCAR if not specified and throws error if user chose a non-existing parameter input
+  # Validates that mechanism is one of the allowed options; defaults to MCAR if not specified
   mechanism <- match.arg(mechanism)
   
   # Number of rows
@@ -103,7 +103,7 @@ make_missing <- function(X, vars, prop = 0.2,
   
   # Copy of X, such that the original X stays unchanged
   X_miss <- X
-
+  
   
   if (mechanism %in% c("MAR", "MNAR")) {
     if (is.null(driver)) {
@@ -115,72 +115,27 @@ make_missing <- function(X, vars, prop = 0.2,
     # Standardizes the driver column such that 'strength' has a comparable effect regardless of the driver's original scale
     z_driver <- as.numeric(scale(X[, driver]))
   }
-
+  
   # Iterates over every column in 'vars'
   for (j in vars) {
     # For each observation, assigns a score; rows with higher scores are more likely to be chosen as missing.
     score <- switch(mechanism,
-                    # Identical probability of missing for all observations (score = 0 for each) 
                     MCAR = rep(0, n),
-                    # Score depends linearly on the (standardized) driver only
                     MAR  = strength * z_driver,
-                    # Score depends on the (standardized) driver and the standardized value of the variable being deleted; its own value influences whether it goes missing.
                     MNAR = strength * z_driver + strength * as.numeric(scale(X[, j]))
     )
-
     
-    # plogis(score): converts the score to a probability in (0,1) using the logistic (sigmoid) function
-    
+  
     # Draws m row indices out of n (without replacement): probability of each being selected is (roughly) proportional to plogis(score) for that row
     idx <- sample(n, m, prob = plogis(score))
-
+    
     # Sets value NA to those m rows in column j
     X_miss[idx, j] <- NA
   }
-
+  
   # Returns the full matrix with missing values (NA) now inserted across the vars columns
   X_miss
 }
-
-
-
-
-## Diagnostic function: confirm whether the mechanisms actually work
-##   MCAR : all means approximately equal
-##   MAR  : driver mean differs between missing and observed rows
-##   MNAR : additionally, the mean of the variable itself differs
-
-check_missing <- function(X, X_miss, vars, driver = NULL) {
-  for (j in vars) {
-    # Returns a vector of TRUE/FALSE values, one for each row in column j (each entry tells you whether that specific cell is missing (NA) or not)
-    r <- is.na(X_miss[, j])
-
-    # Prints Var j | prop = mean(r), where mean(r) is the actual observed proportion of missing values in that column
-    cat(sprintf("Var %-3d | prop = %.3f", j, mean(r)))
-
-    # If a driver was specified, print:
-          # The average driver value among observations where variable j went missing,
-          # The average driver value among observations where variable j is still observed.
-    if (!is.null(driver)) {
-      cat(sprintf(" | driver mis/obs = %6.2f / %6.2f",
-                  mean(X[r, driver]), mean(X[!r, driver])))
-    }
-
-    # X[r,j]: from column j of the true data X, give me only the rows where r is TRUE" (that is, only the rows where variable j was deleted in X_miss). 
-    # This recovers what those now-missing values actually were, before they got wiped out.
-    # mean(X[r,j]): averages these values
-    
-    # Prints:
-          # The true average of variable j, restricted to rows that ended up missing,
-          # The true average of variable j, restricted to rows that stayed observed.
-    cat(sprintf(" | self mis/obs = %6.2f / %6.2f\n",
-                mean(X[r, j]), mean(X[!r, j])))
-  }
-}
-
-
-
-
 
 
 
@@ -194,40 +149,38 @@ check_missing <- function(X, X_miss, vars, driver = NULL) {
 #     1 means equally as good as imputing average under MCAR
 # assignment asks which evaluation metric do we suggest --> choose 1: NRMSE
 
-#maybe addition: bias. NRMSE tells how mich it is off, bias says in which direction
+#addition: bias. NRMSE tells how mich it is off, bias says in which direction
 #report per variable which is imputed 
 
 evaluate <- function(X_true, X_imp, X_miss) {
   miss_mask <- is.na(X_miss)                 # TRUE/FALSE matrix (same size as X_miss)
   diff      <- X_imp - X_true                # elementwise error matrix; 0 on non-missing (observed) cells 
   vars      <- which(colSums(miss_mask) > 0) # collects the indices of columns with missing values
-
+  
   # Assigns column names if no column names
   var_names <- colnames(X_true)
   if (is.null(var_names)) var_names <- paste0("X", seq_len(ncol(X_true)))
-
-  # Applies function(j) once to each value of j in vars (j=1, then j=2, then j=3...)
+  
+  # Applies function(j) once to each value of j in vars
   nrmse <- vapply(vars, function(j) {
-                            # Computes imputation errors only for the missing cells from column j
-                            e <- diff[miss_mask[, j], j]             
-                            sqrt(mean(e^2)) / sd(X_true[, j])
-                        # Returns a single number
-                        }, numeric(1))
-
+    # Computes imputation errors only for the missing cells from column j
+    e <- diff[miss_mask[, j], j]             
+    sqrt(mean(e^2)) / sd(X_true[, j])
+    # Returns a single number
+  }, numeric(1))
+  
   # Computes bias only for the rows in column j where data was missing, then averages those errors (mean signed error)
   bias <- vapply(vars, function(j) {
     mean(diff[miss_mask[, j], j])
   }, numeric(1))
-
+  
   # Collects all computed values into a dataframe
   data.frame(variable = var_names[vars], nrmse = nrmse, bias = bias,
              row.names = NULL)
 }
 
 
-
 ## Baseline + sanity check: average imputation
-##  Expectation under MCAR: NRMSE ~ 1, bias ~ 0
 mean_impute <- function(X_miss) {
   X_imp <- X_miss
   # Iterate over every column in X_miss
@@ -265,7 +218,7 @@ mean_impute <- function(X_miss) {
 # Then evaluation function is used on differences matrix
 # Results will be plotted in Section (2.5)
 
-source("hybrid_kNN v2 (not OG).R")
+source("hybrid_kNN.R")
 args(hybrid_kNN)   
 
 ## Settings (motivate them in report)
@@ -311,7 +264,7 @@ one_run <- function(scenario, mechanism, rep) {
   X      <- gen_data(scenario)
   X_miss <- make_missing(X, miss_vars, prop, mechanism,
                          driver = driver, strength = strength)
-
+  
   # Intitializes variables 
   scores  <- list()
   weights <- NULL
@@ -324,7 +277,7 @@ one_run <- function(scenario, mechanism, rep) {
     
     if (m == "hybrid") weights <- weights_to_df(out$weights)
   }
-
+  
   scores <- do.call(rbind, scores)            # Combines the scores data frames row-wise into one large dataframe
   scores$scenario  <- scenario                # Adds "scenario" column to scores dataframe
   scores$mechanism <- mechanism               # Adds "mechanism" column to scores dataframe
@@ -367,50 +320,166 @@ saveRDS(list(results = results, weights = weights_df,
         "sim_results.rds")
 
 
-## Sanity checks (set run_checks TRUE to run)
-run_checks <- FALSE
-if (run_checks) {
-  X_B    <- generate_data_B(n = 2000, p = 10)
-  print(round(cor(X_B), 2))
-  
-  X_mcar <- make_missing(X_B, miss_vars, 0.2, "MCAR")
-  X_mar  <- make_missing(X_B, miss_vars, 0.2, "MAR",  driver = driver)
-  X_mnar <- make_missing(X_B, miss_vars, 0.2, "MNAR", driver = driver)
-  cat("\n--- MCAR ---\n"); check_missing(X_B, X_mcar, miss_vars, driver)
-  cat("\n--- MAR  ---\n"); check_missing(X_B, X_mar,  miss_vars, driver)
-  cat("\n--- MNAR ---\n"); check_missing(X_B, X_mnar, miss_vars, driver)
-  
-  # evaluate: mean-imputatie with MCAR must be NRMSE ~ 1 and bias ~ 0 
-  print(evaluate(X_B, mean_impute(X_mcar), X_mcar))
-  
-  # weighted = FALSE must give equal weights
-  res_uw <- hybrid_kNN(X_mcar[1:500, ], k = 5, weighted = FALSE)
-  print(res_uw$weights$X1)
-}
-
-
-
-#===============================================
-#do evaluation (already done if I'm not mistaken)
-
-
-
-
-
-
-
-
 #=====================================================================================================================================
 #=====================================================================================================================================
 # 2.5 Summarize and visualize data data  ------------------------------------------------------
 #plot before and after imputations
 #=====================================================================================================================================
 #=====================================================================================================================================
+## 2.5a Summary statistics ----
+
+mech_levels <- c("MCAR", "MAR", "MNAR")
+
+# 1. Mean NRMSE and bias per scenario x mechanism x method (averaged over reps and X1-X3)
+tab <- aggregate(cbind(nrmse, bias) ~ scenario + mechanism + method,
+                 data = results, FUN = mean)
+tab$mechanism <- factor(tab$mechanism, levels = mech_levels)
+tab <- tab[order(tab$scenario, tab$mechanism, tab$method), ]
+
+cat("\n===== Mean NRMSE (lower = better) =====\n")
+print(ftable(round(xtabs(nrmse ~ scenario + mechanism + method, data = tab), 3)))
+
+cat("\n===== Mean bias (0 = unbiased) =====\n")
+print(ftable(round(xtabs(bias ~ scenario + mechanism + method, data = tab), 3)))
+
+
+# 2. Paired difference hybrid - standard (per rep, averaged over X1-X3 first)
+per_rep <- aggregate(nrmse ~ scenario + mechanism + method + rep,
+                     data = results, FUN = mean)
+
+d <- merge(subset(per_rep, method == "hybrid"),
+           subset(per_rep, method == "unweighted"),
+           by = c("scenario", "mechanism", "rep"),
+           suffixes = c("_hyb", "_std"))
+d$diff <- d$nrmse_hyb - d$nrmse_std
+
+paired <- do.call(rbind, lapply(split(d, list(d$scenario, d$mechanism), drop = TRUE),
+                                function(x) {
+                                  se <- sd(x$diff) / sqrt(nrow(x))
+                                  data.frame(scenario      = x$scenario[1],
+                                             mechanism     = x$mechanism[1],
+                                             mean_diff     = mean(x$diff),
+                                             se            = se,
+                                             t_stat        = mean(x$diff) / se,
+                                             hybrid_better = mean(x$diff < 0))   # share of reps where hybrid wins
+                                }))
+paired$mechanism <- factor(paired$mechanism, levels = mech_levels)
+paired <- paired[order(paired$scenario, paired$mechanism), ]
+rownames(paired) <- NULL
+
+cat("\n===== Paired difference NRMSE (hybrid - standard; < 0 = hybrid better) =====\n")
+print(transform(paired,
+                mean_diff = round(mean_diff, 4),
+                se        = round(se, 4),
+                t_stat    = round(t_stat, 2)))
+
+
+# 3. Average RF weights when imputing X1 (pooled over mechanisms)
+w_avg <- aggregate(weight ~ scenario + predictor,
+                   data = subset(weights_df, target == "X1"), FUN = mean)
+w_avg$predictor <- factor(w_avg$predictor, levels = paste0("X", 2:p))
+
+cat("\n===== Average RF weights for imputing X1 =====\n")
+print(round(xtabs(weight ~ scenario + predictor, data = w_avg), 3))
+
+
+# 4. Save tables for the report
+write.csv(tab,    "table_nrmse_bias.csv",   row.names = FALSE)
+write.csv(paired, "table_paired_diff.csv",  row.names = FALSE)
+
+
+install.packages("VIM", dependencies = TRUE)
+library(VIM)
+
+illus_rep <- 1   # same replication as rep 1 in the simulation
+
+## One VIM marginplot: X4 (driver) vs X1 (imputed), saved as pdf ----
+vim_plot <- function(scenario, mechanism, method, file) {
+  set.seed(base_seed + illus_rep)          # same data and same missing pattern for every method
+  X      <- gen_data(scenario)
+  X_miss <- make_missing(X, miss_vars, prop, mechanism,
+                         driver = driver, strength = strength)
+  X_imp  <- methods[[method]](X_miss)$X_hat
+  
+  # VIM needs indicator columns "<var>_imp" that mark which values were imputed
+  df <- data.frame(
+    X4     = X_imp[, "X4"],
+    X1     = X_imp[, "X1"],
+    X4_imp = is.na(X_miss[, "X4"]),        # always FALSE (driver is fully observed)
+    X1_imp = is.na(X_miss[, "X1"])
+  )
+  
+  pdf(file, width = 4, height = 4)
+  marginplot(df, delimiter = "_imp")
+  dev.off()
+}
+
+## 2 scenarios x 3 mechanisms x 2 methods = 12 pdfs ----
+for (s in c("A", "B")) {
+  for (mech in c("MCAR", "MAR", "MNAR")) {
+    for (m in c("unweighted", "hybrid")) {
+      vim_plot(s, mech, m, sprintf("vim_%s_%s_%s.pdf", s, mech, m))
+    }
+  }
+}
+
+## NRMSE per situation for the subcaptions (average over R replications, X1) ----
+aggregate(nrmse ~ scenario + mechanism + method,
+          data = subset(results, variable == "X1"), FUN = mean)
 
 
 
+#to see true vs imputed values
+library(ggplot2)
 
+illus_rep <- 1
 
+## True vs imputed values of X1 for one replication ----
+make_tvi <- function(scenario, mechanism) {
+  set.seed(base_seed + illus_rep)
+  X      <- gen_data(scenario)
+  X_miss <- make_missing(X, miss_vars, prop, mechanism,
+                         driver = driver, strength = strength)
+  miss   <- is.na(X_miss[, "X1"])
+  
+  out <- lapply(c("hybrid", "unweighted", "mean"), function(m) {
+    X_imp <- methods[[m]](X_miss)$X_hat
+    data.frame(true = X[miss, "X1"], imputed = X_imp[miss, "X1"], method = m)
+  })
+  df <- do.call(rbind, out)
+  df$scenario  <- scenario
+  df$mechanism <- mechanism
+  df
+}
 
+combos <- expand.grid(scenario  = c("A", "B"),
+                      mechanism = c("MCAR", "MAR", "MNAR"),
+                      stringsAsFactors = FALSE)
 
+tvi <- do.call(rbind, lapply(seq_len(nrow(combos)), function(i) {
+  make_tvi(combos$scenario[i], combos$mechanism[i])
+}))
+
+tvi$mechanism <- factor(tvi$mechanism, levels = c("MCAR", "MAR", "MNAR"))
+tvi$scenario  <- factor(tvi$scenario, levels = c("A", "B"),
+                        labels = c("Scenario A", "Scenario B"))
+tvi$method    <- factor(tvi$method, levels = c("hybrid", "unweighted", "mean"),
+                        labels = c("Hybrid kNN", "Standard kNN", "Mean"))
+
+p_tvi <- ggplot(tvi, aes(x = true, y = imputed, colour = method)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") +
+  geom_point(alpha = 0.5, size = 1) +
+  facet_grid(scenario ~ mechanism) +
+  coord_equal() +
+  scale_colour_manual(values = c("Hybrid kNN"   = "#E69F00",
+                                 "Standard kNN" = "#CC3311",
+                                 "Mean"         = "grey60")) +
+  labs(x = expression("True value of " * X[1]),
+       y = expression("Imputed value of " * X[1]),
+       colour = NULL) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+print(p_tvi)
+ggsave("fig_true_vs_imputed.pdf", p_tvi, width = 9, height = 6)
 
