@@ -3,7 +3,7 @@
 # Group 6:
 # Alexandre Lavrinenko    xxxxxx
 # Ensar Tasgin            646820
-# Sanne Maasman           xxxxxx
+# Sanne Maasman           644729
 # Sebastiaan van Helden   822236
 #
 # hybrid_kNN():
