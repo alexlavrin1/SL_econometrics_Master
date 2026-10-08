@@ -19,6 +19,7 @@
 # Libraries ---------------------------------------------------------------
 
 library(MASS)
+library(ggplot2)
 set.seed(2026)
 
 #=====================================================================================================================================
@@ -347,6 +348,80 @@ print(ftable(round(xtabs(bias ~ scenario + mechanism + method, data = tab), 3)))
 per_rep <- aggregate(nrmse ~ scenario + mechanism + method + rep,
                      data = results, FUN = mean)
 
+
+## 2.5b Section 3.1: NRMSE boxplots ----
+# Each boxplot contains one NRMSE value per simulation replication.
+# Within each replication, NRMSE is averaged over the three incomplete
+# variables X1-X3. This prevents the three values from the same generated
+# dataset from being treated as independent observations.
+plot_nrmse <- per_rep
+
+plot_nrmse$mechanism <- factor(
+  plot_nrmse$mechanism,
+  levels = c("MCAR", "MAR", "MNAR")
+)
+
+plot_nrmse$scenario <- factor(
+  plot_nrmse$scenario,
+  levels = c("A", "B"),
+  labels = c("Scenario A", "Scenario B")
+)
+
+plot_nrmse$method <- factor(
+  plot_nrmse$method,
+  levels = c("hybrid", "unweighted", "mean"),
+  labels = c("Hybrid kNN", "Standard kNN", "Mean")
+)
+
+p_nrmse <- ggplot(
+  plot_nrmse,
+  aes(x = method, y = nrmse, fill = method)
+) +
+  geom_boxplot(
+    width = 0.65,
+    outlier.alpha = 0.35,
+    colour = "grey25"
+  ) +
+  # The white diamond shows the mean NRMSE in each boxplot.
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 23,
+    size = 2.3,
+    fill = "white",
+    colour = "black"
+  ) +
+  facet_grid(scenario ~ mechanism) +
+  scale_fill_manual(
+    values = c(
+      "Hybrid kNN"   = "#E69F00",
+      "Standard kNN" = "#CC3311",
+      "Mean"         = "grey65"
+    )
+  ) +
+  labs(
+    x = NULL,
+    y = "NRMSE",
+    fill = NULL
+  ) +
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "grey92"),
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
+
+print(p_nrmse)
+
+ggsave(
+  filename = "fig_nrmse_boxplots.pdf",
+  plot = p_nrmse,
+  width = 9,
+  height = 5.5
+)
+
+
 d <- merge(subset(per_rep, method == "hybrid"),
            subset(per_rep, method == "unweighted"),
            by = c("scenario", "mechanism", "rep"),
@@ -430,7 +505,6 @@ aggregate(nrmse ~ scenario + mechanism + method,
 
 
 #to see true vs imputed values
-library(ggplot2)
 
 illus_rep <- 1
 
@@ -482,4 +556,3 @@ p_tvi <- ggplot(tvi, aes(x = true, y = imputed, colour = method)) +
 
 print(p_tvi)
 ggsave("fig_true_vs_imputed.pdf", p_tvi, width = 9, height = 6)
-
