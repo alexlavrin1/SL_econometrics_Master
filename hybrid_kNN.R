@@ -1,7 +1,7 @@
 # ==============================================================================
 # Part 1 — Assignment Statistical Learning
 # Group 6:
-# Alexandre Lavrinenko    xxxxxx
+# Alexandre Lavrinenko    595341
 # Ensar Tasgin            646820
 # Sanne Maasman           644729
 # Sebastiaan van Helden   822236
